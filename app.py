@@ -48,7 +48,14 @@ for key in required_keys:
     if not os.getenv(key):
         print(f"WARNING: {key} is missing in .env")
 
-os.environ["groq_api_key"] = os.getenv("groq_api_key")
+# Pehle lowercase try karega, agar None mila to Uppercase try karega
+groq_key = os.getenv("groq_api_key") or os.getenv("GROQ_API_KEY")
+
+# Ensure karein ki value string ho (None na ho)
+if groq_key:
+    os.environ["groq_api_key"] = groq_key
+    os.environ["GROQ_API_KEY"] = groq_key # Library ke liye bhi set kar dein
+    
 os.environ["TAVILY_API_KEY"] = os.getenv("TAVILY_API_KEY")
 os.environ["hf_api_key"] = os.getenv("hf_api_key")
 os.environ["HF_HUB_DISABLE_SYMLINKS"] = "1"

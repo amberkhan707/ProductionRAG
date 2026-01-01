@@ -46,14 +46,19 @@ jobs:
           -d '{ "vectors": { "size": 768, "distance": "Cosine" } }'
 
     - name: Run Unit Tests
-      # Env vars ab real service se connect honge (Localhost service container par map hoga)
       env:
         CI: "true"
-        GROQ_API_KEY: "dummy_key"
+        
+        # 1. Aapke Code ke liye (Lowercase - Jaisa app.py mein hai)
+        groq_api_key: "dummy_key" 
+        hf_api_key: "dummy_key"
+        
+        # 2. Libraries ke liye (Uppercase - Standard)
+        HUGGINGFACEHUB_API_TOKEN: "dummy_key"
         TAVILY_API_KEY: "dummy_key"
-        HF_API_KEY: "dummy_key"
-        # GitHub Actions mein 'localhost' service container ko point karega
-        QDRANT_URL: "http://localhost:6333" 
-        QDRANT_API_KEY: "dummy_key" # Agar chahiye ho
+        
+        # 3. Database
+        QDRANT_URL: "http://localhost:6333"
+        QDRANT_API_KEY: "dummy_key"
       run: |
         pytest test_app.py

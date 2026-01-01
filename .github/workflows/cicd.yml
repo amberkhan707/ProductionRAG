@@ -10,7 +10,7 @@ jobs:
   build-and-test:
     runs-on: ubuntu-latest
 
-    # 🔥 NEW: Yahan hum Qdrant ka container chala rahe hain testing ke liye
+    #NEW: Yahan hum Qdrant ka container chala rahe hain testing ke liye
     services:
       qdrant:
         image: qdrant/qdrant:latest

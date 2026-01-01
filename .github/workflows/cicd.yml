@@ -49,9 +49,9 @@ jobs:
       # Env vars ab real service se connect honge (Localhost service container par map hoga)
       env:
         CI: "true"
-        groq_api_key: "dummy_key"
+        GROQ_API_KEY: "dummy_key"
         TAVILY_API_KEY: "dummy_key"
-        hf_api_key: "dummy_key"
+        HF_API_KEY: "dummy_key"
         # GitHub Actions mein 'localhost' service container ko point karega
         QDRANT_URL: "http://localhost:6333" 
         QDRANT_API_KEY: "dummy_key" # Agar chahiye ho

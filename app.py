@@ -12,6 +12,7 @@ from langchain_docling.loader import ExportType
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_qdrant import QdrantVectorStore
 from langchain_ollama.embeddings import OllamaEmbeddings
+from langchain_core.embeddings import FakeEmbeddings
 from qdrant_client import QdrantClient
 
 # Classic Imports
@@ -82,7 +83,15 @@ DOC_STORE_PATH = "./persistent_doc_store"
 COLLECTION_NAME = "agentic_rag_db"
 QDRANT_URL = os.getenv("QDRANT_URL", "http://localhost:6333")
 
-embd = OllamaEmbeddings(model="nomic-embed-text:latest", base_url= OLLAMA_URL)
+
+if os.getenv("CI"):
+    # Agar GitHub Actions par hai, toh Fake Embeddings use karein (Size same rakhein)
+    print("⚠️ Running in CI Mode: Using Fake Embeddings")
+    embd = FakeEmbeddings(size=768) 
+else:
+    # Local machine par Real Ollama use karein
+    embd = OllamaEmbeddings(model="nomic-embed-text")
+    
 client = QdrantClient(url=QDRANT_URL)
 vectorstore = QdrantVectorStore( client=client, collection_name=COLLECTION_NAME, embedding=embd,)
 

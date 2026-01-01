@@ -48,6 +48,7 @@ jobs:
     - name: Run Unit Tests
       # Env vars ab real service se connect honge (Localhost service container par map hoga)
       env:
+        CI: "true"
         groq_api_key: "dummy_key"
         TAVILY_API_KEY: "dummy_key"
         hf_api_key: "dummy_key"

@@ -37,6 +37,13 @@ jobs:
         python -m pip install --upgrade pip
         pip install -r requirements.txt
         pip install pytest httpx pytest-asyncio
+    - name: Create Dummy Qdrant Collection
+      run: |
+        # Thoda wait karein taaki DB ready ho jaye
+        sleep 5 
+        curl -X PUT "http://localhost:6333/collections/agentic_rag_db" \
+          -H "Content-Type: application/json" \
+          -d '{ "vectors": { "size": 768, "distance": "Cosine" } }'
 
     - name: Run Unit Tests
       # Env vars ab real service se connect honge (Localhost service container par map hoga)

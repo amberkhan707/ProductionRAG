@@ -1,2 +1,59 @@
-Fastapi
+# ----------------------------
+# Core Web API
+# ----------------------------
+fastapi>=0.110.0
+uvicorn[standard]>=0.27.0
+pydantic>=2.6.0
+
+# ----------------------------
+# Environment & Config
+# ----------------------------
+python-dotenv>=1.0.1
+
+# ----------------------------
+# LangChain Core
+# ----------------------------
+langchain>=0.2.12
+langchain-core>=0.2.30
+langchain-community>=0.2.12
+langchain-text-splitters>=0.2.2
+
+# ----------------------------
+# LangChain Extensions
+# ----------------------------
+langchain-groq>=0.1.5
+langchain-ollama>=0.1.3
+langchain-qdrant>=0.1.7
+langchain-docling>=0.1.6
+accelerate
+langchain-classic>=0.0.6
+
+# ----------------------------
+# Agentic Graph Orchestration
+# ----------------------------
+langgraph>=0.2.18
+
+# ----------------------------
+# Vector Database
+# ----------------------------
+qdrant-client>=1.9.1
+
+# ----------------------------
+# Search Tooling
+# ----------------------------
+tavily-python>=0.3.3
+
+# ----------------------------
+# ML / Reranking
+# ----------------------------
+transformers>=4.43.0
+torch>=2.2.0
+sentence-transformers>=2.7.0
+rank_bm25
+
+# ----------------------------
+# Unit Testing (CI pipeline)
+# ----------------------------
 pytest
+httpx
+pytest-asyncio

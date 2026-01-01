@@ -1,1 +1,7 @@
-ragenv
+ragenv/
+__pycache__/
+*.pyc
+.env
+.DS_Store
+persistent_doc_store/
+qdrant_storage/

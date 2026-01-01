@@ -61,4 +61,4 @@ jobs:
         QDRANT_URL: "http://localhost:6333"
         QDRANT_API_KEY: "dummy_key"
       run: |
-        pytest test_app.py
+        pytest

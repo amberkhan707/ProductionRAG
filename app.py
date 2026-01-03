@@ -1,5 +1,4 @@
 import os
-import numy as np 
 import pickle
 import uvicorn
 from typing import List, Optional, Literal, Any
@@ -8,8 +7,6 @@ from pydantic import BaseModel, Field
 from dotenv import load_dotenv
 
 # --- IMPORTS ---
-from langchain_docling import DoclingLoader
-from langchain_docling.loader import ExportType
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_qdrant import QdrantVectorStore
 from langchain_ollama.embeddings import OllamaEmbeddings

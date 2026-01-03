@@ -1,4 +1,5 @@
 import os
+import numpy as np 
 import pickle
 import uvicorn
 from typing import List, Optional, Literal, Any

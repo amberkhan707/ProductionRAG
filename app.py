@@ -107,7 +107,6 @@ try:
     keys = list(docstore.yield_keys())
     
     if keys:
-        print(f"Loading {len(keys)} parent chunks from disk...")
         # Batch mein fetch karna fast hota hai
         # Lekin memory usage kam rakhne ke liye loop mein karte hain
         for key in keys:
@@ -126,7 +125,6 @@ if bm25_docs:
     # BM25 Retriever banayein
     bm25_retriever = BM25Retriever.from_documents(bm25_docs)
     bm25_retriever.k = 20
-    print(f"BM25 Index Built with {len(bm25_docs)} documents.")
 else:
     print("No docs found for BM25. Using fallback.")
     bm25_retriever = BM25Retriever.from_texts(["Empty context"], metadatas=[{}])

@@ -1,4 +1,3 @@
-# 1. Use Python 3.10 (More stable for modern AI libs)
 FROM python:3.13-slim
 
 # 2. System Deps (git zaroori hai kuch libraries ke liye)
@@ -12,10 +11,9 @@ WORKDIR /app
 
 COPY requirements.txt .
 
-# 3. Install Python Deps
+# 3. Install Python Depandencies
 RUN pip install --no-cache-dir -r requirements.txt
 
-# 4. Copy Code AND Persistent Data
 # (Ye line ensure karegi ki ingest kiya hua data image mein chala jaye)
 COPY . .
 

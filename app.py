@@ -6,41 +6,34 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 from dotenv import load_dotenv
 
-# --- IMPORTS ---
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_qdrant import QdrantVectorStore
 from langchain_ollama.embeddings import OllamaEmbeddings
 from langchain_core.embeddings import FakeEmbeddings
 from qdrant_client import QdrantClient
 
-# Classic Imports
 from langchain_classic.retrievers import ParentDocumentRetriever
 from langchain_classic.storage import LocalFileStore
 
-# Core Imports
 from langchain_core.documents import Document
 from langchain_core.stores import BaseStore
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 
-# LangGraph & Tools
 from langchain_community.tools.tavily_search import TavilySearchResults
 from langchain_groq import ChatGroq
 from langgraph.graph import END, StateGraph, START
 from typing_extensions import TypedDict
 
-# Retrieval Utilities
 from langchain_classic.retrievers import EnsembleRetriever, ContextualCompressionRetriever
 from langchain_classic.retrievers.document_compressors import CrossEncoderReranker
 from langchain_community.cross_encoders import HuggingFaceCrossEncoder
 from langchain_community.retrievers import BM25Retriever
 
+load_dotenv()
 OLLAMA_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
 
-# --- 1. ENVIRONMENT SETUP ---
-load_dotenv()
 
-# Verify keys exist (Good practice for Ops)
 required_keys = ["groq_api_key", "TAVILY_API_KEY", "hf_api_key"]
 for key in required_keys:
     if not os.getenv(key):
@@ -79,7 +72,7 @@ class PickleDocStore(BaseStore[str, Document]):
     def yield_keys(self):
         yield from self.store.yield_keys()
         
-# --- 3. FASTAPI APP INIT ---
+# --- FASTAPI APP ---
 app = FastAPI(title="Agentic RAG API",description="LLMOps Project: RAG with Web Search & Grading")
 
 # 1. SETUP DENSE RETRIEVER (Qdrant)
@@ -90,11 +83,9 @@ QDRANT_URL = os.getenv("QDRANT_URL", "http://localhost:6333")
 
 
 if os.getenv("CI"):
-    # Agar GitHub Actions par hai, toh Fake Embeddings use karein (Size same rakhein)
-    print("⚠️ Running in CI Mode: Using Fake Embeddings")
+    print("Running in CI Mode: Using Fake Embeddings")
     embd = FakeEmbeddings(size=768) 
 else:
-    # Local machine par Real Ollama use karein
     embd = OllamaEmbeddings(model="nomic-embed-text")
     
 client = QdrantClient(url=QDRANT_URL)
@@ -109,9 +100,7 @@ parent_splitter = RecursiveCharacterTextSplitter(chunk_size=900, chunk_overlap=1
 
 dense_retriever = ParentDocumentRetriever(vectorstore=vectorstore,docstore=docstore,child_splitter=child_splitter,parent_splitter=parent_splitter,search_kwargs={"k": 20})
 
-# ---------------------------------------------------------
 # 2. SETUP SPARSE RETRIEVER (BM25) - Optimized (Disk Read)
-# ---------------------------------------------------------
 bm25_docs = []
 
 try:
@@ -127,20 +116,19 @@ try:
             if doc:
                 bm25_docs.append(doc)
     else:
-        print("⚠️ Warning: Persistent store is empty!")
+        print("Warning: Persistent store is empty!")
 
 except Exception as e:
-    print(f"❌ Error loading from disk: {e}")
+    print(f"Error loading from disk: {e}")
 
 # Check agar docs mile ya nahi
 if bm25_docs:
     # BM25 Retriever banayein
     bm25_retriever = BM25Retriever.from_documents(bm25_docs)
     bm25_retriever.k = 20
-    print(f"✅ BM25 Index Built with {len(bm25_docs)} documents.")
+    print(f"BM25 Index Built with {len(bm25_docs)} documents.")
 else:
-    print("⚠️ No docs found for BM25. Using fallback.")
-    # Fallback to prevent crash
+    print("No docs found for BM25. Using fallback.")
     bm25_retriever = BM25Retriever.from_texts(["Empty context"], metadatas=[{}])
     bm25_retriever.k = 1
 

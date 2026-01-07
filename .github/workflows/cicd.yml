@@ -10,7 +10,6 @@ jobs:
   build-and-test:
     runs-on: ubuntu-latest
 
-    #NEW: Yahan hum Qdrant ka container chala rahe hain testing ke liye
     services:
       qdrant:
         image: qdrant/qdrant:latest
@@ -49,11 +48,9 @@ jobs:
       env:
         CI: "true"
         PYTHONPATH: .
-        # 1. Aapke Code ke liye (Lowercase - Jaisa app.py mein hai)
         groq_api_key: "dummy_key" 
         hf_api_key: "dummy_key"
         
-        # 2. Libraries ke liye (Uppercase - Standard)
         HUGGINGFACEHUB_API_TOKEN: "dummy_key"
         TAVILY_API_KEY: "dummy_key"
         
@@ -63,11 +60,10 @@ jobs:
       run: |
         pytest
 
-   # JOB 2: CD (Delivery) - Ye naya part hai! 🚀
+   # JOB 2: CD (Delivery) - Ye naya part hai! 
   build-and-push-image:
-    needs: build-and-test  # 🔥 Bahut Important: Ye tabhi chalega jab Test pass hoga
+    needs: build-and-test 
     runs-on: ubuntu-latest
-    # Sirf tab chalao jab 'main' branch par push ho (PR par nahi)
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
 
     steps:
@@ -84,7 +80,6 @@ jobs:
         uses: docker/build-push-action@v4
         with:
           context: .                  # Root folder context (taaki app.py dikhe)
-          file: docker/Dockerfile     # Dockerfile kahan rakha hai
+          file: docker/Dockerfile     
           push: true
-          # Image ka naam: username/repo-name:tag
           tags: ${{ secrets.DOCKER_USERNAME }}/production-rag:latest

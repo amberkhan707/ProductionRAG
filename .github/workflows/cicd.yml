@@ -15,7 +15,7 @@ jobs:
         image: qdrant/qdrant:latest
         ports:
           - 6333:6333
-        # Simple health check to ensure DB is ready
+        # it ensures that the Qdrant service is fully initialized and ready to accept requests before the test steps run
         options: >-
           --health-cmd "apt-get update && apt-get install -y curl && curl -f http://localhost:6333/readyz || exit 1"
           --health-interval 10s
@@ -60,11 +60,12 @@ jobs:
       run: |
         pytest
 
-   # JOB 2: CD (Delivery) - Ye naya part hai! 
+   # JOB 2: 
   build-and-push-image:
     needs: build-and-test 
     runs-on: ubuntu-latest
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    # ye ensure krta h push confirm ho aur pull request open ni ho tabhi docker image banana h
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' 
 
     steps:
       - name: Checkout Code

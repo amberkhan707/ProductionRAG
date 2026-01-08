@@ -27,7 +27,7 @@ COLLECTION_NAME = "agentic_rag_db"
 QDRANT_URL = "http://localhost:6333"
 OLLAMA_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
 
-# PROPER DOCSTORE (BaseStore COMPLIANT)
+# it persists the parent chunks locally so that ParentDocumentRetriever can reconstruct full context after retrieving child embeddings.”
 class PickleDocStore(BaseStore[str, Document]):
     """
     A BaseStore-compliant persistent document store
@@ -80,15 +80,8 @@ if not raw_docs:
     sys.exit()
 
 # SPLITTERS
-child_splitter = RecursiveCharacterTextSplitter(
-    chunk_size=250,
-    chunk_overlap=27
-)
-
-parent_splitter = RecursiveCharacterTextSplitter(
-    chunk_size=900,
-    chunk_overlap=100
-)
+child_splitter = RecursiveCharacterTextSplitter(chunk_size=250,chunk_overlap=27)
+parent_splitter = RecursiveCharacterTextSplitter(chunk_size=900,chunk_overlap=100)
 
 # QDRANT
 print("Connecting to Qdrant...")
@@ -98,30 +91,17 @@ if not client.collection_exists(COLLECTION_NAME):
     print("Creating Qdrant collection...")
     client.create_collection(
         collection_name=COLLECTION_NAME,
-        vectors_config=VectorParams(
-            size=768,
-            distance=Distance.COSINE,
-        ),
+        vectors_config=VectorParams(size=768,distance=Distance.COSINE,),
     )
-
-vectorstore = QdrantVectorStore(
-    client=client,
-    collection_name=COLLECTION_NAME,
-    embedding=embeddings,
-)
+vectorstore = QdrantVectorStore(client=client,collection_name=COLLECTION_NAME,embedding=embeddings,)
 
 # DOCSTORE (PERSISTENT)
-print("🔹 Initializing persistent document store...")
+print("Initializing persistent document store...")
 raw_store = LocalFileStore(DOC_STORE_PATH)
 docstore = PickleDocStore(raw_store)
 
 # RETRIEVER
-retriever = ParentDocumentRetriever(
-    vectorstore=vectorstore,
-    docstore=docstore,
-    child_splitter=child_splitter,
-    parent_splitter=parent_splitter,
-)
+retriever = ParentDocumentRetriever(vectorstore=vectorstore,docstore=docstore,child_splitter=child_splitter,parent_splitter=parent_splitter,)
 
 # INGESTION
 print("Starting ingestion...")

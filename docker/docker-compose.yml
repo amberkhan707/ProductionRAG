@@ -1,40 +1,40 @@
-version: '3.8'
+  version: '3.8'
 
-services:
-  api_app:
-    build: .
-    container_name: agentic_rag_app
-    ports:
-      - "8000:8000"
-    environment:
-      # Note: 'qdrant_db' service name niche match hona chahiye
-      - OLLAMA_BASE_URL=http://host.docker.internal:11434
-      - QDRANT_URL=http://qdrant_db:6333
-      - groq_api_key=${groq_api_key}
-      - TAVILY_API_KEY=${TAVILY_API_KEY}
-      - hf_api_key=${hf_api_key}
+  services:
+    api_app:
+      build: .
+      container_name: agentic_rag_app
+      ports:
+        - "8000:8000"
+      environment:
+        # Note: 'qdrant_db' service name niche match hona chahiye
+        - OLLAMA_BASE_URL=http://host.docker.internal:11434
+        - QDRANT_URL=http://qdrant_db:6333
+        - groq_api_key=${groq_api_key}
+        - TAVILY_API_KEY=${TAVILY_API_KEY}
+        - hf_api_key=${hf_api_key}
 
-    depends_on:
-      - qdrant_db
+      depends_on:
+        - qdrant_db
 
-    volumes:
-      # 1. Persistent Doc Store (Files) ko map karein
-      - ./persistent_doc_store:/app/persistent_doc_store
-      # 2. HF Cache (Taaki models bar-bar download na ho)
-      - hf_cache:/root/.cache/huggingface
+      volumes:
+        # 1. Persistent Doc Store (Files) ko map karein
+        - ./persistent_doc_store:/app/persistent_doc_store
+        # 2. HF Cache (Taaki models bar-bar download na ho)
+        - hf_cache:/root/.cache/huggingface
 
-    extra_hosts: # Ye Linux/Windows ke liye zaroori hai taaki host resolve ho sake
-      - "host.docker.internal:host-gateway"
+      extra_hosts: # Ye Linux/Windows ke liye zaroori hai taaki host resolve ho sake
+        - "host.docker.internal:host-gateway"
 
-  qdrant_db: # Service name yahan 'qdrant_db' hai
-    image: qdrant/qdrant
-    container_name: qdrant_vector_db
-    ports:
-      - "6333:6333"
-    volumes:
-      # 3. Qdrant Vectors persist karne ke liye
-      - qdrant_data:/qdrant/storage
+    qdrant_db: # Service name yahan 'qdrant_db' hai
+      image: qdrant/qdrant
+      container_name: qdrant_vector_db
+      ports:
+        - "6333:6333"
+      volumes:
+        # 3. Qdrant Vectors persist karne ke liye
+        - qdrant_data:/qdrant/storage
 
-volumes:
-  qdrant_data:
-  hf_cache:
+  volumes:
+    qdrant_data:
+    hf_cache:

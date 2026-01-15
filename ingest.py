@@ -1,10 +1,13 @@
 import os
 import sys
 import pickle
-from typing import List, Optional
+# from typing import List, Optional
 # LOADERS
 from langchain_docling import DoclingLoader
 from langchain_docling.loader import ExportType
+from docling.datamodel.base_models import InputFormat
+from docling.datamodel.pipeline_options import PdfPipelineOptions, EasyOcrOptions
+from docling.document_converter import DocumentConverter, PdfFormatOption
 # TEXT SPLITTERS
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 # EMBEDDINGS
@@ -15,10 +18,10 @@ from qdrant_client import QdrantClient
 from qdrant_client.http.models import Distance, VectorParams
 # CLASSIC RAG
 from langchain_classic.retrievers import ParentDocumentRetriever
-from langchain_classic.storage import LocalFileStore
+from langchain_classic.storage import LocalFileStore, EncoderBackedStore
 # CORE TYPES
-from langchain_core.documents import Document
-from langchain_core.stores import BaseStore
+# from langchain_core.documents import Document
+# from langchain_core.stores import BaseStore
 
 # CONFIG
 DOC_DIR = "documents"
@@ -27,29 +30,20 @@ COLLECTION_NAME = "agentic_rag_db"
 QDRANT_URL = "http://localhost:6333"
 OLLAMA_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
 
-# it persists the parent chunks locally so that ParentDocumentRetriever can reconstruct full context after retrieving child embeddings.”
-class PickleDocStore(BaseStore[str, Document]):
-    """
-    A BaseStore-compliant persistent document store
-    using pickle serialization on top of LocalFileStore.
-    """
+# --- OCR Configuration ---
+# Hum explicitly EasyOCR engine select kar rahe hain
+pipeline_options = PdfPipelineOptions()
+pipeline_options.do_ocr = True
+pipeline_options.ocr_options = EasyOcrOptions()
+pipeline_options.do_table_structure = True
+pipeline_options.table_structure_options.do_cell_matching = True
 
-    def __init__(self, store: LocalFileStore):
-        self.store = store
-
-    def mset(self, items: List[tuple[str, Document]]) -> None:
-        serialized = [(key, pickle.dumps(doc)) for key, doc in items]
-        self.store.mset(serialized)
-
-    def mget(self, keys: List[str]) -> List[Optional[Document]]:
-        values = self.store.mget(keys)
-        return [pickle.loads(v) if v else None for v in values]
-
-    def mdelete(self, keys: List[str]) -> None:
-        self.store.mdelete(keys)
-
-    def yield_keys(self):
-        yield from self.store.yield_keys()
+# Document Converter setup jo EasyOCR use karega
+doc_converter = DocumentConverter(
+    format_options={
+        InputFormat.PDF: PdfFormatOption(pipeline_options=pipeline_options)
+    }
+)
 
 # PRECHECKS
 if not os.path.exists(DOC_DIR):
@@ -67,12 +61,13 @@ embeddings = OllamaEmbeddings(model="nomic-embed-text:latest", base_url=OLLAMA_U
 # LOAD DOCUMENTS
 print("Loading PDFs...")
 raw_docs = []
-
 for file in os.listdir(DOC_DIR):
     if file.lower().endswith(".pdf"):
         path = os.path.join(DOC_DIR, file)
-        print(f" {file}")
-        loader = DoclingLoader(path, export_type=ExportType.MARKDOWN)
+        print(f" Processing: {file}")
+        
+        # Loader mein hum apna custom 'doc_converter' pass karenge
+        loader = DoclingLoader(file_path=path, export_type=ExportType.MARKDOWN,converter=doc_converter)
         raw_docs.extend(loader.load())
 
 if not raw_docs:
@@ -98,7 +93,14 @@ vectorstore = QdrantVectorStore(client=client,collection_name=COLLECTION_NAME,em
 # DOCSTORE (PERSISTENT)
 print("Initializing persistent document store...")
 raw_store = LocalFileStore(DOC_STORE_PATH)
-docstore = PickleDocStore(raw_store)
+# Ye ensure karega ki data hamesha pickle format mein hi save/load ho
+docstore = EncoderBackedStore(
+    store=raw_store,
+    key_encoder=lambda k: k,
+    value_serializer=pickle.dumps,
+    value_deserializer=pickle.loads
+)
+#docstore = PickleDocStore(raw_store)
 
 # RETRIEVER
 retriever = ParentDocumentRetriever(vectorstore=vectorstore,docstore=docstore,child_splitter=child_splitter,parent_splitter=parent_splitter,)
@@ -108,5 +110,3 @@ print("Starting ingestion...")
 retriever.add_documents(raw_docs)
 
 print("INGESTION COMPLETE!")
-print("Child embeddings → Qdrant")
-print("Parent documents → Disk (pickle)")

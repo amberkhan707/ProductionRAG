@@ -104,7 +104,7 @@ else:
 
 # Reranker Model
 reranker_model = HuggingFaceCrossEncoder(model_name="BAAI/bge-reranker-v2-m3")
-compressor = CrossEncoderReranker(model=reranker_model, top_n=5)
+compressor = CrossEncoderReranker(model=reranker_model, top_n=3)
 
 # 5. AGENT COMPONENTS (LLMs & Prompts)
 
@@ -173,6 +173,8 @@ def analyze_query(state):
     # Inject Global Cache into Prompt
     v_str = ", ".join(AVAILABLE_VENDORS) if AVAILABLE_VENDORS else "None"
     s_str = ", ".join(AVAILABLE_SECTIONS) if AVAILABLE_SECTIONS else "None"
+    print(v_str)
+    print(s_str)
     
     result = analyzer_chain.invoke({ "question": question, "vendor_list": v_str, "section_list": s_str})
     
@@ -226,7 +228,7 @@ def retrieve(state):
     )
     
     # C. Hybrid Search
-    ensemble = EnsembleRetriever(retrievers=[dynamic_dense, bm25_retriever], weights=[0.7, 0.3])
+    ensemble = EnsembleRetriever(retrievers=[dynamic_dense, bm25_retriever], weights=[0.6, 0.4])
     compression_retriever = ContextualCompressionRetriever(base_retriever=ensemble, base_compressor=compressor)
     
     docs = compression_retriever.invoke(question)

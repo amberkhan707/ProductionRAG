@@ -1,8 +1,5 @@
 import os
 import sys
-import pickle
-import re
-import shutil
 
 # LOADERS
 from langchain_docling import DoclingLoader
@@ -22,9 +19,10 @@ from langchain_qdrant import QdrantVectorStore
 from qdrant_client import QdrantClient
 from qdrant_client.http.models import Distance, VectorParams
 
-# CLASSIC RAG
+# STORAGE
+from package import docstore_metadata
+from package import clean_and_header
 from langchain_classic.retrievers import ParentDocumentRetriever
-from langchain_classic.storage import LocalFileStore, EncoderBackedStore
 
 # CONFIG
 DOC_DIR = "documents"
@@ -32,6 +30,7 @@ DOC_STORE_PATH = "./persistent_doc_store"
 COLLECTION_NAME = "agentic_rag_db"
 QDRANT_URL = "http://localhost:6333"
 OLLAMA_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
+docstore = docstore_metadata.docstore
 
 # --- OCR Configuration ---
 pipeline_options = PdfPipelineOptions()
@@ -52,19 +51,6 @@ if not os.path.exists(DOC_DIR):
     print(f"'{DOC_DIR}' created. Add PDFs and rerun.")
     sys.exit()
 
-# Remove previous parent chunk
-if os.path.exists(DOC_STORE_PATH):
-    shutil.rmtree(DOC_STORE_PATH)
-os.makedirs(DOC_STORE_PATH)
-
-# clean page_content
-def clean_text(text: str) -> str:
-    # 1. remove multiple Whitespace 
-    text = re.sub(r'\s+', ' ', text).strip()
-    # 2. Fix Broken words ("commu- nication" -> "communication")
-    text = re.sub(r'(\w+)-\s+(\w+)', r'\1\2', text)
-    return text
-
 # EMBEDDINGS
 print("Initializing embeddings...")
 embeddings = OllamaEmbeddings(model="nomic-embed-text:latest", base_url=OLLAMA_URL)
@@ -78,32 +64,41 @@ for file in os.listdir(DOC_DIR):
         path = os.path.join(DOC_DIR, file)
         
         vendor_name = os.path.splitext(file)[0]
-        print(f" Processing: {file} | Vendor: {vendor_name}")
-        # Load
+        
         loader = DoclingLoader(file_path=path, export_type=ExportType.MARKDOWN, converter=doc_converter)
         loaded_docs = loader.load()
 
-        # Har naye document ke liye section reset hoga
-        current_section = "General"
+        # Sticky Section Logic
+        last_seen_header = "General" 
         for doc in loaded_docs:
-            # remove whitespace and spelling break
-            doc.page_content = clean_text(doc.page_content)
-            # FIND SECTION ---
-            found_headers = re.findall(r'^#+\s+(.+)$', doc.page_content, re.MULTILINE)
-            if found_headers:
-                current_section = found_headers[-1].strip()
-            # A. Preserve essential internal metadata
+            # 1. Clean Text
+            doc.page_content = clean_and_header.clean_text(doc.page_content)
+            
+            # 2. Extract Headers from THIS page
+            current_page_headers = clean_and_header.process_headers(doc.page_content)
+            
+            # 3. Determine Metadata Value
+            if current_page_headers:
+                # Sabko combine karo (comma separated) taaki koi bhi search ho to ye page mile.
+                section_metadata = ", ".join(current_page_headers)
+                
+                # Update Sticky Header (Last found header becomes context for next page)
+                last_seen_header = current_page_headers[-1]
+            else:
+                # Pichla wala sticky header use karo
+                section_metadata = last_seen_header
+            
+            # 4. Assign Metadata
             page_num = 1
             if "dl_meta" in doc.metadata and "page_no" in doc.metadata["dl_meta"]:
                 page_num = doc.metadata["dl_meta"]["page_no"]
 
-            # B. Build clean metadata dict
             doc.metadata = {
-                "source": file,                   # Default
-                "vendor_name": vendor_name,       # Custom Requirement
-                "section": current_section,       # Custom Requirement (Sticky)
-                "page": page_num,                 # Essential for RAG
-                "dl_meta": doc.metadata.get("dl_meta", {}) # Default (keep strictly if needed)
+                "source": file,
+                "vendor_name": vendor_name,
+                "section": section_metadata,
+                "page": page_num,
+                "dl_meta": doc.metadata.get("dl_meta", {})
             }
 
         raw_docs.extend(loaded_docs)
@@ -120,21 +115,14 @@ parent_splitter = RecursiveCharacterTextSplitter(chunk_size=900, chunk_overlap=1
 print("Connecting to Qdrant...")
 client = QdrantClient(url=QDRANT_URL)
 
-# Recreating database (Clean Slate)
 if client.collection_exists(COLLECTION_NAME):
     client.delete_collection(COLLECTION_NAME)
-client.create_collection(collection_name=COLLECTION_NAME,vectors_config=VectorParams(size=768, distance=Distance.COSINE),)
-vectorstore = QdrantVectorStore(client=client,collection_name=COLLECTION_NAME,embedding=embeddings,)
-
-# DOCSTORE (PERSISTENT)
-print("Initializing persistent document store...")
-raw_store = LocalFileStore(DOC_STORE_PATH)
-docstore = EncoderBackedStore(
-    store=raw_store,
-    key_encoder=lambda k: k,
-    value_serializer=pickle.dumps,
-    value_deserializer=pickle.loads
+    
+client.create_collection(
+    collection_name=COLLECTION_NAME,
+    vectors_config=VectorParams(size=768, distance=Distance.COSINE),
 )
+vectorstore = QdrantVectorStore(client=client, collection_name=COLLECTION_NAME, embedding=embeddings)
 
 # RETRIEVER
 retriever = ParentDocumentRetriever(vectorstore=vectorstore,docstore=docstore,child_splitter=child_splitter,parent_splitter=parent_splitter,)

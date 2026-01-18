@@ -15,6 +15,8 @@ docstore = EncoderBackedStore(
 
 
 def load_metadata_cache():
+    AVAILABLE_VENDORS.clear()
+    AVAILABLE_SECTIONS.clear()
     # Ye persistent store se saare existing vendors aur sections nikal kar memory me rakhega.
     try:
         keys = list(docstore.yield_keys())
@@ -28,7 +30,13 @@ def load_metadata_cache():
                 if "vendor_name" in doc.metadata:
                     AVAILABLE_VENDORS.add(doc.metadata["vendor_name"])
                 if "section" in doc.metadata:
-                    AVAILABLE_SECTIONS.add(doc.metadata["section"])
+                    raw_section_str = doc.metadata["section"]
+                    if raw_section_str and isinstance(raw_section_str, str):
+                        parts = raw_section_str.split(",")
+                        for p in parts:
+                            clean_sec = p.strip()
+                            if clean_sec:
+                                AVAILABLE_SECTIONS.add(clean_sec)
         
     except Exception as e:
         print(f"Error loading cache: {e}")

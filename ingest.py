@@ -1,5 +1,6 @@
 import os
 import sys
+import shutil
 
 # LOADERS
 from langchain_docling import DoclingLoader

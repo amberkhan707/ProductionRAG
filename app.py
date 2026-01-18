@@ -1,6 +1,7 @@
 import os
 import uvicorn
-from typing import List, Literal, Any, Dict
+import difflib
+from typing import List, Literal, Any, Optional, Dict
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 from dotenv import load_dotenv
@@ -112,17 +113,48 @@ class GraphState(TypedDict):
 
 def analyze_query(state):
     print("---ANALYZE QUERY---")
-
     question = state["question"]
+    
+    # 1. Inject only Vendor List (It's small enough)
     v_str = ", ".join(AVAILABLE_VENDORS) if AVAILABLE_VENDORS else "None"
-    s_str = ", ".join(AVAILABLE_SECTIONS) if AVAILABLE_SECTIONS else "None"
-    print(v_str)
-    print("\n \n  \n")
-    print(s_str)
+    result = analyzer_chain.invoke({"question": question, "vendor_list": v_str, "section_list": "N/A"})
+    
+    # 2. VENDOR MAPPING (Same as before)
+    final_vendors = []
+    if AVAILABLE_VENDORS and result.vendors:
+        known_vendors = list(AVAILABLE_VENDORS)
+        for v in result.vendors:
+            matches = difflib.get_close_matches(v, known_vendors, n=1, cutoff=0.7)
+            if matches: final_vendors.append(matches[0])
+    
+    print(f"Known sections are :: {list(set(AVAILABLE_SECTIONS))}")
+    print(f"Question sections are :: {result.section}")
+    # 3. SECTION MAPPING (NEW LOGIC)
+    final_sections = []
+    print("testing")
+    # Logic: LLM extracted "Plant Performance Model"\
+    if AVAILABLE_SECTIONS and result.section:
+        known_sections = list(AVAILABLE_SECTIONS)
+        
+        for topic in result.section:
+            # "Plant Performance Model" is inside "Plant Performance Model (PPM)" means subset matching
+            matched_subset = [
+                s for s in known_sections 
+                if topic.lower() in s.lower() or s.lower() in topic.lower()
+            ]
+            print(f"matched sections are :: {matched_subset}")
+            if matched_subset:
+                final_sections.extend(matched_subset[:3])
+            
+            else:
+                fuzzy_matches = difflib.get_close_matches(topic, known_sections, n=1, cutoff=0.6)
+                if fuzzy_matches:
+                    final_sections.append(fuzzy_matches[0])
+    print(f"filtered sections are :: {list(set(final_sections))}")
 
-    result = analyzer_chain.invoke({ "question": question, "vendor_list": v_str, "section_list": s_str})
-    extracted = {"vendors": result.vendors, "section": result.section}
-
+    extracted = {"vendors": final_vendors, "sections": list(set(final_sections))}
+    print(f"   Final Mapped Filters: {extracted}")
+    
     return {"filters": extracted, "question": result.standalone_question}
 
 def retrieve(state):
@@ -139,10 +171,10 @@ def retrieve(state):
     if target_sections:
         section_matches = [rest.FieldCondition(key="metadata.section", match=rest.MatchText(text=s))for s in target_sections]
         q_conditions.append(rest.Filter(should=section_matches))
-        
-    print(f"q_conditions -> {q_conditions}")
+
     q_filter = rest.Filter(must=q_conditions) if q_conditions else None
     print(f"q_filter -> {q_filter}")
+
     # Dense Retriever
     child_docs = vectorstore.similarity_search( question, k=20, filter=q_filter)
     parent_ids = []

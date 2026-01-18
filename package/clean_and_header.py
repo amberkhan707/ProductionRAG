@@ -2,7 +2,8 @@ import re
 
 def clean_text(text: str) -> str:
     """ Cleans text but preserves Newlines for Structure detection. """
-    if not text: return ""
+    if not text: 
+        return ""
     text = text.replace('\t', ' ').replace('\u00a0', ' ')
     # Fix broken words (hyphenated line breaks)
     text = re.sub(r'(\w+)-\s*\n\s*(\w+)', r'\1\2', text)

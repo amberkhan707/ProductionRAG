@@ -1,1 +1,37 @@
-## hey what's up i am going to make this project production ready"# ProductionRAG" 
+# Agentic RAG API
+
+A Multi-Vendor, Metadata-Aware Retrieval Augmented Generation System.
+
+This project implements an advanced Agentic RAG architecture designed to parse complex PDF documentation, intelligently extract metadata (vendors, sections), and perform hybrid retrieval with reranking. It utilizes LangGraph for workflow orchestration, Qdrant for vector storage, and Docling for high-fidelity document parsing with OCR.
+
+## 🚀 Features
+
+- **Intelligent Ingestion & OCR**: Uses Docling to process PDFs, applying "Sticky Header" logic to preserve context (headers/sections) across page boundaries.
+- **Hybrid Retrieval**: Combines Dense Vector Search (Qdrant) and Sparse Search (BM25) to maximize retrieval recall.
+- **Agentic Query Analysis**: Dynamically extracts metadata filters (Vendor, Section) from natural language queries using LLMs.
+- **Relevance Grading**: A dedicated graph node grades retrieved documents for relevance before generation to reduce hallucinations.
+- **Cross-Encoder Reranking**: Uses HuggingFace Cross-Encoders to re-order retrieved context for maximum precision.
+- **Parent-Child Indexing**: Retrieves full parent documents based on matching smaller child chunks to maintain context window integrity.
+
+## 🛠 Tech Stack
+
+- **Orchestration**: LangChain & LangGraph
+- **API Framework**: FastAPI
+- **Vector Database**: Qdrant
+- **LLM & Embeddings**:
+  - Inference: Groq (Llama 3.3 / Llama 4)
+  - Embeddings: Ollama (nomic-embed-text)
+- **Document Processing**: Docling
+- **Reranking**: HuggingFace (BAAI/bge-reranker-v2-m3)
+
+## 📋 Prerequisites
+
+Ensure you have the following installed and running:
+
+- Python 3.10+
+- **Qdrant**: Running on port 6333.
+
+  ```bash
+  docker run -p 6333:6333 qdrant/qdrant
+```
+

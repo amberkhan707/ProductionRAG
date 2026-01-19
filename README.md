@@ -33,5 +33,27 @@ Ensure you have the following installed and running:
 
   ```bash
   docker run -p 6333:6333 qdrant/qdrant
-```
+  
+- **Ollama**: Running locally with the embedding model pulled.
+
+  ```bash
+  ollama serve
+  ollama pull nomic-embed-text
+  
+Groq API Key: Required for the LLM inference.
+
+
+## ⚙️ Configuration
+
+Create a `.env` file in the root directory:
+
+```ini
+# API Keys
+GROQ_API_KEY=your_groq_api_key_here
+HF_API_KEY=your_huggingface_token  # Optional, usually needed for gated models
+
+# Services
+QDRANT_URL=http://localhost:6333
+OLLAMA_BASE_URL=http://localhost:11434
+
 

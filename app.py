@@ -1,7 +1,7 @@
 import os
 import uvicorn
 import difflib
-from typing import List, Literal, Any, Optional, Dict
+from typing import List, Literal, Any, Dict
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 from dotenv import load_dotenv

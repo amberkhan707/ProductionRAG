@@ -47,7 +47,7 @@ Groq API Key: Required for the LLM inference.
 
 Create a `.env` file in the root directory:
 
-```ini
+```
 # API Keys
 GROQ_API_KEY=your_groq_api_key_here
 HF_API_KEY=your_huggingface_token  # Optional, usually needed for gated models
@@ -55,5 +55,13 @@ HF_API_KEY=your_huggingface_token  # Optional, usually needed for gated models
 # Services
 QDRANT_URL=http://localhost:6333
 OLLAMA_BASE_URL=http://localhost:11434
+```
+## 📦 Installation
+
+Clone the repository:
+
+```bash
+git clone https://github.com/your-username/agentic-rag-api.git
+cd agentic-rag-api
 
 

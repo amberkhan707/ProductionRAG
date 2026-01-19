@@ -63,5 +63,84 @@ Clone the repository:
 ```bash
 git clone https://github.com/your-username/agentic-rag-api.git
 cd agentic-rag-api
+```
+Install dependencies:
+```
+pip install -r requirements.txt
+```
+Note: Ensure you have the custom package module available in your python path if it contains shared logic (docstore_metadata, bm25builder, etc.).
 
+## 📖 Usage
 
+### 1. Ingest Documents
+
+Place your PDF files into the `documents/` directory.  
+The ingestion pipeline performs OCR, chunking, and indexing into Qdrant.
+
+```bash
+python Ingest.py
+```
+Note: This process initializes the "Parent Document Retriever" structure. It may take time depending on OCR usage and file size.
+
+### 2. Start the API Server
+
+Launch the FastAPI application:
+
+```
+python app.py
+Server will start at http://0.0.0.0:8000
+```
+
+### 3. Query the Agent
+
+You can interact with the API via the endpoint /chat.
+
+Example Request:
+
+```
+curl -X POST "http://localhost:8000/chat" \
+     -H "Content-Type: application/json" \
+     -d '{"question": "What are the performance metrics for the Solar Turbine model?"}'
+```
+
+Example Response:
+
+```json
+{
+  "answer": "Based on the Solar Turbine documentation, the performance metrics include..."
+}
+```
+
+## 🏗 Architecture Workflow
+
+The system uses a **LangGraph `StateGraph`** to orchestrate the end-to-end request lifecycle:
+
+1. **Analyze Query**  
+   The LLM parses the user question to extract intent, vendor identifiers, and relevant document sections.
+
+2. **Retrieve**
+   - Applies metadata-based filtering (Vendor, Section) within Qdrant
+   - Executes hybrid retrieval:
+     - Dense vector search
+     - Sparse BM25 search
+   - Reranks retrieved candidates using cross-encoders
+
+3. **Grade Documents**  
+   An LLM evaluates retrieved chunks for semantic relevance. Non-relevant context is discarded.
+
+4. **Generate**  
+   The final response is generated using only high-quality, validated context.
+
+---
+
+## 📂 Project Structure
+
+```text
+├── documents/               # PDF input directory
+├── persistent_doc_store/    # Local storage for parent documents
+├── package/                 # Shared utilities (BM25, metadata logic)
+├── Ingest.py                # ETL pipeline: PDF → OCR → Qdrant
+├── app.py                   # FastAPI application and LangGraph workflow
+├── .env                     # Environment configuration
+└── README.md
+```

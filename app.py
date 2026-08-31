@@ -10,6 +10,9 @@ from dotenv import load_dotenv
 from langchain_qdrant import QdrantVectorStore
 from langchain_ollama.embeddings import OllamaEmbeddings
 from langchain_core.embeddings import FakeEmbeddings
+from langchain_ollama import ChatOllama
+
+# --- Qdrant IMPORTS ---
 from qdrant_client import QdrantClient
 from qdrant_client.http import models as rest 
 
@@ -27,6 +30,9 @@ from package import docstore_metadata
 from package.prompt import analyzer_template, generate_prompt
 from package import bm25builder
 
+# Opik for monitoring
+from opik.integrations.langchain import OpikTracer
+
 # Load Metadata Cache
 docstore_metadata.load_metadata_cache()
 AVAILABLE_VENDORS = docstore_metadata.AVAILABLE_VENDORS
@@ -37,9 +43,11 @@ bm25_retriever = bm25builder.build_bm25_retriever(docstore, k=20)
 load_dotenv()
 # 1. CONFIGURATION & SETUP
 DOC_DIR = "documents"
-COLLECTION_NAME = "agentic_rag_db"
+COLLECTION_NAME = "_RAG_DB"
 QDRANT_URL = os.getenv("QDRANT_URL", "http://localhost:6333")
 OLLAMA_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
+os.environ["OPIK_URL_OVERRIDE"] = "http://localhost:5173/api"
+os.environ["OPIK_PROJECT_NAME"] = "Agentic_RAG_Project"
 
 # API Keys
 groq_key = os.getenv("groq_api_key") or os.getenv("GROQ_API_KEY")
@@ -56,8 +64,8 @@ else:
 
 
 # Reranker settings
-reranker_model = HuggingFaceCrossEncoder(model_name="BAAI/bge-reranker-v2-m3")
-compressor = CrossEncoderReranker(model=reranker_model, top_n=5)
+reranker_model = HuggingFaceCrossEncoder( model_name="/home/ppc/models/bge-reranker-v2-m3" )
+compressor = CrossEncoderReranker( model=reranker_model, top_n=5 )
 
 # 2. RETRIEVAL DATABASE
 client = QdrantClient(url=QDRANT_URL)
@@ -71,7 +79,7 @@ class SearchFilters(BaseModel):
     section: List[str] = Field(default=list, description="Section name.")
     standalone_question: str = Field(description="The core question.")
 
-analyzer_llm = ChatGroq(model="llama-3.3-70b-versatile", temperature=0)
+analyzer_llm = ChatOllama(model="gemma4:e2b", temperature=0)
 query_analyzer = analyzer_llm.with_structured_output(SearchFilters)
 
 analyzer_prompt = ChatPromptTemplate.from_messages([
@@ -81,25 +89,12 @@ analyzer_prompt = ChatPromptTemplate.from_messages([
 analyzer_chain = analyzer_prompt | query_analyzer
 
 
-# --- B. GRADER ---
-class GradeDocuments(BaseModel):
-    binary_score: Literal["yes", "no"] = Field(description="Relevant 'yes' or 'no'")
-
-grader_llm = ChatGroq(model="llama-3.3-70b-versatile", temperature=0)
-retrieval_grader = grader_llm.with_structured_output(GradeDocuments)
-grade_prompt = ChatPromptTemplate.from_messages([
-    ("system", "Grade relevance 'yes' or 'no'."),
-    ("human", "Doc: {document} \n Question: {question}")
-])
-grader_chain = grade_prompt | retrieval_grader
-
-
 # --- C. Generate ---
-gen_llm = ChatGroq(model="meta-llama/llama-4-maverick-17b-128e-instruct")
+gen_llm = ChatOllama(model="gemma4:e2b", temperature=0)
 system_msg = generate_prompt
 gen_prompt = ChatPromptTemplate.from_messages([
-    ("system", system_msg),
-    ("human", "Question: {question}\nContext: {context}")
+    ("system", generate_prompt),
+    ("human", "Question: {question}")
 ])
 chain = gen_prompt | gen_llm | StrOutputParser()
 
@@ -131,7 +126,6 @@ def analyze_query(state):
     print(f"Question sections are :: {result.section}")
     # 3. SECTION MAPPING (NEW LOGIC)
     final_sections = []
-    print("testing")
     # Logic: LLM extracted "Plant Performance Model"\
     if AVAILABLE_SECTIONS and result.section:
         known_sections = list(AVAILABLE_SECTIONS)
@@ -164,33 +158,54 @@ def retrieve(state):
     target_vendors = filters.get("vendors", []) 
     target_sections = filters.get("sections", [])         
 
-    # A. Build Qdrant Filter
+    # A. Build Qdrant Filter (For Dense Search)
     q_conditions = []
     if target_vendors:
-        q_conditions.append(rest.FieldCondition(key="metadata.vendor_name",match=rest.MatchAny(any=target_vendors)))
+        q_conditions.append(rest.FieldCondition(key="metadata.vendor_name", match=rest.MatchAny(any=target_vendors)))
     if target_sections:
-        section_matches = [rest.FieldCondition(key="metadata.section", match=rest.MatchText(text=s))for s in target_sections]
+        # MatchText works for partial/exact match in Qdrant
+        section_matches = [rest.FieldCondition(key="metadata.section", match=rest.MatchText(text=s)) for s in target_sections]
         q_conditions.append(rest.Filter(should=section_matches))
 
     q_filter = rest.Filter(must=q_conditions) if q_conditions else None
-    print(f"q_filter -> {q_filter}")
 
-    # Dense Retriever
-    child_docs = vectorstore.similarity_search( question, k=20, filter=q_filter)
+    # B. Dense Retrieval (Qdrant)
+    child_docs = vectorstore.similarity_search(question, k=20, filter=q_filter)
+    
     parent_ids = []
     for d in child_docs:
         if "doc_id" in d.metadata:
             parent_ids.append(d.metadata["doc_id"])
+            
     unique_ids = list(set(parent_ids)) # Deduplicate IDs
+    
     parent_docs = [] # Fetch Parent Docs from Disk
     if unique_ids:
         fetched = docstore.mget(unique_ids)
         parent_docs = [d for d in fetched if d is not None]
 
-    sparse_docs = bm25_retriever.invoke(question) # BM25 returns Parents directly 
+    # C. Sparse Retrieval (BM25)
+    raw_sparse_docs = bm25_retriever.invoke(question)
+    
+    filtered_sparse_docs = []
+    for d in raw_sparse_docs:
+        doc_vendor = d.metadata.get("vendor_name")
+        
+        # Vendor Check
+        if target_vendors and doc_vendor not in target_vendors:
+            continue # Agar vendor match nahi hua, toh is document ko ignore karo
             
-    # Combine (Dense Parents + Sparse Parents)
-    all_docs = parent_docs + sparse_docs
+        filtered_sparse_docs.append(d)
+
+    # D. Combine & Deduplicate 
+    unique_docs_map = {}
+    for d in (parent_docs + filtered_sparse_docs):
+        # We use page_content as key to ensure purely unique text goes to reranker
+        unique_docs_map[d.page_content] = d 
+        
+    all_docs = list(unique_docs_map.values())
+
+    # E. Rerank
     if all_docs:
         final_docs = compressor.compress_documents(documents=all_docs, query=question)
     else:
@@ -198,14 +213,6 @@ def retrieve(state):
         
     return {"documents": final_docs}
 
-def grade_documents(state):
-    print("---GRADE---")
-    filtered = []
-    for d in state["documents"]:
-        score = grader_chain.invoke({"question": state["question"], "document": d.page_content})
-        if score.binary_score == "yes":
-            filtered.append(d)
-    return {"documents": filtered}
 
 def generate(state):
     print("---GENERATE---")
@@ -214,14 +221,31 @@ def generate(state):
     if not docs:
         return {"generation": "I'm sorry, I couldn't find any relevant information in the documents."}
     
+    unique_vendors = list(set([d.metadata.get("vendor_name", "Unknown") for d in docs]))
+    vendor_count = len(unique_vendors)
+    
+    if vendor_count > 1:
+        analysis_mode = f"MULTIPLE VENDORS FOUND ({', '.join(unique_vendors)}). You MUST output a comparative Markdown Table."
+    else:
+        analysis_mode = f"SINGLE VENDOR FOUND ({unique_vendors[0]}). Use clear bullet points. DO NOT use a table."
+
     context_parts = []
-    for d in docs:
+    # Using XML formatting. Gemma model isko bahut achhe se parse karta hai.
+    for i, d in enumerate(docs, 1):
         v_name = d.metadata.get("vendor_name", "Unknown")
         s_name = d.metadata.get("section", "General")
-        context_parts.append(f"Source: {v_name} | Section: {s_name}\nContent: {d.page_content}")
+        
+        xml_doc = f"""<document index="{i}">
+                    <vendor>{v_name}</vendor>
+                    <section>{s_name}</section>
+                    <content>{d.page_content}</content>
+                    </document>"""
+        context_parts.append(xml_doc)
 
     context = "\n\n".join(context_parts)
-    ans = chain.invoke({"context": context, "question": state["question"]})
+    
+    ans = chain.invoke({"context": context, "question": state["question"], "analysis_mode": analysis_mode })
+    
     return {"generation": ans}
 
 # 7. GRAPH DEFINITION
@@ -229,13 +253,11 @@ workflow = StateGraph(GraphState)
 
 workflow.add_node("analyze_query", analyze_query)
 workflow.add_node("retrieve", retrieve)
-workflow.add_node("grade_documents", grade_documents)
 workflow.add_node("generate", generate)
 
 workflow.add_edge(START, "analyze_query")
 workflow.add_edge("analyze_query", "retrieve") 
-workflow.add_edge("retrieve", "grade_documents")
-workflow.add_edge("grade_documents", "generate")
+workflow.add_edge("retrieve", "generate")
 workflow.add_edge("generate", END)
 
 graph = workflow.compile()
@@ -253,7 +275,8 @@ class ChatResponse(BaseModel):
 async def chat_endpoint(request: ChatRequest):
     try:
         inputs = {"question": request.question}
-        final_state = await graph.ainvoke(inputs)
+        opik_tracer = OpikTracer()
+        final_state = await graph.ainvoke(inputs, config = {"callbacks": [opik_tracer]})
         return ChatResponse(answer=final_state["generation"])
     except Exception as e:
         import traceback

@@ -3,7 +3,7 @@ from langchain_classic.storage import LocalFileStore, EncoderBackedStore
 
 AVAILABLE_VENDORS = set()
 AVAILABLE_SECTIONS = set()
-DOC_STORE_PATH = "./persistent_doc_store"
+DOC_STORE_PATH = "./parent_chunks"
 
 raw_store = LocalFileStore(DOC_STORE_PATH)
 docstore = EncoderBackedStore(

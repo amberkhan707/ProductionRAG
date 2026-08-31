@@ -1,146 +1,190 @@
-# Agentic RAG API
+# Agents
 
-A Multi-Vendor, Metadata-Aware Retrieval Augmented Generation System.
+### analyze_query:
 
-This project implements an advanced Agentic RAG architecture designed to parse complex PDF documentation, intelligently extract metadata (vendors, sections), and perform hybrid retrieval with reranking. It utilizes LangGraph for workflow orchestration, Qdrant for vector storage, and Docling for high-fidelity document parsing with OCR.
+Before user query ::
+AVAILABLE_VENDORS : vector database me total kitne vendors hain already present hota h ingest krte waqt hi
+AVAILABLE_SECTIONS : kitne sections hain
 
-## 🚀 Features
+After user query ::
+query : What is the pricing of Eltrix? -> LLM
+LLM prompt -> Question se Vendors nikalo, Sections nikalo, aur question ko saaf (standalone) karke likho.
+Pydantic -> Ye sabse powerful cheez hai. Ye LLM ko force karta hai ki wo kachra output na de, balki ek strict JSON format de jisme sirf 3 box hon: vendors, section, aur standalone_question.
+Output: LLM ek raw guess marta hai. (Maano usne vendor nikala: ["Eltrixx"] aur section nikala: ["price"]).
 
-- **Intelligent Ingestion & OCR**: Uses Docling to process PDFs, applying "Sticky Header" logic to preserve context (headers/sections) across page boundaries.
-- **Hybrid Retrieval**: Combines Dense Vector Search (Qdrant) and Sparse Search (BM25) to maximize retrieval recall.
-- **Agentic Query Analysis**: Dynamically extracts metadata filters (Vendor, Section) from natural language queries using LLMs.
-- **Relevance Grading**: A dedicated graph node grades retrieved documents for relevance before generation to reduce hallucinations.
-- **Cross-Encoder Reranking**: Uses HuggingFace Cross-Encoders to re-order retrieved context for maximum precision.
-- **Parent-Child Indexing**: Retrieves full parent documents based on matching smaller child chunks to maintain context window integrity.
+Verification ::
+LLM ka vendors extracted> ko string comparison krta h available vendors ke list me sbse difflib ka use krke agr 70% se jyada accuracy h to final vendor me add krta h
+LLM ka section extracted> ko string comparion difflab wala aur 60% accuracy ke saath aur subset match krta h eg: agr price extract kara llm ne aur available vendor me pricing h to wo pricing ko include kr lega.
 
-## 🛠 Tech Stack
+final output ::
+After verifying everything it will return dictionary>
+{"filters": {"vendors": ["Eltrix"], "sections": ["Pricing and Maintenance"]}, "question": "What is the pricing of Eltrix?"}
 
-- **Orchestration**: LangChain & LangGraph
-- **API Framework**: FastAPI
-- **Vector Database**: Qdrant
-- **LLM & Embeddings**:
-  - Inference: Groq (Llama 3.3 / Llama 4)
-  - Embeddings: Ollama (nomic-embed-text)
-- **Document Processing**: Docling
-- **Reranking**: HuggingFace (BAAI/bge-reranker-v2-m3)
+### Retrieve
 
-## 📋 Prerequisites
+prerequisite setup::
+1. bm25_retriever : Keyword search krta h
+2. Qdrant : database jha pe vector stored h
+3. reranker(compressor) : question ke according top n document krega sb ka sb ni krega
 
-Ensure you have the following installed and running:
+user query::
+pichle node se question, vendor_name aur sections_name nikalta h 
 
-- Python 3.10+
-- **Qdrant**: Running on port 6333.
+dense retriever::
+child doc vector ke saath similarity search hota h with filter aur 20 chunks wapas aate h
+Is 20 chunks ke parent documents laate h metadata ke doc_id ke help se aur parent_doc variable me store krte h
 
-  ```bash
-  docker run -p 6333:6333 qdrant/qdrant
-  
-- **Ollama**: Running locally with the embedding model pulled.
+sparse retriever::
+ye keyword search krta h sb document pe qki bm25 me filters apply ni hota qdrant ke ander
+Manually pyhton se filter apply hota h retrieved document pe
+aur saare document ek filtered_sparse_docs me store hota h
 
-  ```bash
-  ollama serve
-  ollama pull nomic-embed-text
-  
-Groq API Key: Required for the LLM inference.
+Deduplication::
+kuch document aise bhi ho skte h jo filtered_sparse_docs aur parent_doc dono me ho
+all_docs variable me saare unique document h sparse aur dense dono milake
+
+Reranker::
+reranker ko ham question aur all_docs dete h, reranker top5 documents jo question ko satify kr rha ho wo final_docs me store hote h
+
+### Generate
+
+Document check::
+ye document check krta h agr koi document iske paas aaya hi ni h retrieve hokr to "sorry no relevance doc to this question" output me
+
+Context building::
+ye har chunks ko ek single string me jodta h aur har chunks ke upar uska vendor_name aur section likh deta h xml format me 
+
+answer generation::
+prompt context jo maine doc se nikala aur question teeno ko llm ke paas bhejta h aur final answer return krta h 
 
 
-## ⚙️ Configuration
+# Evaluation
 
-Create a `.env` file in the root directory:
-
-```
-# API Keys
-GROQ_API_KEY=your_groq_api_key_here
-HF_API_KEY=your_huggingface_token  # Optional, usually needed for gated models
-
-# Services
-QDRANT_URL=http://localhost:6333
-OLLAMA_BASE_URL=http://localhost:11434
-```
-## 📦 Installation
-
-Clone the repository:
-
-```bash
-git clone https://github.com/your-username/agentic-rag-api.git
-cd agentic-rag-api
-```
-Install dependencies:
-```
-pip install -r requirements.txt
-```
-Note: Ensure you have the custom package module available in your python path if it contains shared logic (docstore_metadata, bm25builder, etc.).
-
-## 📖 Usage
-
-### 1. Ingest Documents
-
-Place your PDF files into the `documents/` directory.  
-The ingestion pipeline performs OCR, chunking, and indexing into Qdrant.
-
-```bash
-python Ingest.py
-```
-Note: This process initializes the "Parent Document Retriever" structure. It may take time depending on OCR usage and file size.
-
-### 2. Start the API Server
-
-Launch the FastAPI application:
+### Pipeline
 
 ```
-python app.py
-Server will start at http://0.0.0.0:8000
+User Query
+    ↓
+Retriever
+    ↓
+Top-5 Documents
+    ↓
+Ground Truth Documents se comparison
+    ↓
+Precision@5, Recall@5, MRR@5, nDCG@5
 ```
 
-### 3. Query the Agent
+### Example (SciFact)
 
-You can interact with the API via the endpoint /chat.
+**Query:**
+> "Vitamin D deficiency is associated with increased risk of cardiovascular disease"
 
-Example Request:
+**SciFact Ground Truth**
+Relevant Documents: `[Doc_10, Doc_25]`
 
-```
-curl -X POST "http://localhost:8000/chat" \
-     -H "Content-Type: application/json" \
-     -d '{"question": "What are the performance metrics for the Solar Turbine model?"}'
-```
+**RAG Retriever Output**
+Top-5 Retrieved: `[Doc_25, Doc_80, Doc_10, Doc_44, Doc_91]`
 
-Example Response:
-
-```json
-{
-  "answer": "Based on the Solar Turbine documentation, the performance metrics include..."
-}
-```
-
-## 🏗 Architecture Workflow
-
-The system uses a **LangGraph `StateGraph`** to orchestrate the end-to-end request lifecycle:
-
-1. **Analyze Query**  
-   The LLM parses the user question to extract intent, vendor identifiers, and relevant document sections.
-
-2. **Retrieve**
-   - Applies metadata-based filtering (Vendor, Section) within Qdrant
-   - Executes hybrid retrieval:
-     - Dense vector search
-     - Sparse BM25 search
-   - Reranks retrieved candidates using cross-encoders
-
-3. **Grade Documents**  
-   An LLM evaluates retrieved chunks for semantic relevance. Non-relevant context is discarded.
-
-4. **Generate**  
-   The final response is generated using only high-quality, validated context.
+Ab evaluation metrics isi result ko different angles se measure karte hain.
 
 ---
 
-## 📂 Project Structure
+## 1. Precision@5
 
-```text
-├── documents/               # PDF input directory
-├── persistent_doc_store/    # Local storage for parent documents
-├── package/                 # Shared utilities (BM25, metadata logic)
-├── Ingest.py                # ETL pipeline: PDF → OCR → Qdrant
-├── app.py                   # FastAPI application and LangGraph workflow
-├── .env                     # Environment configuration
-└── README.md
+Jo 5 documents tumne retrieve kiye, unmein se kitne actually relevant the?
+
+**Ground Truth:** `[Doc_10, Doc_25]`
+**Retrieved Top-5:** `[Doc_25, Doc_80, Doc_10, Doc_44, Doc_91]`
+
+| Retrieved | Relevant? |
+|:---------:|:---------:|
+| Doc_25    | ✅ YES    |
+| Doc_80    | ❌ NO     |
+| Doc_10    | ✅ YES    |
+| Doc_44    | ❌ NO     |
+| Doc_91    | ❌ NO     |
+
+- Relevant retrieved documents = 2
+- Total retrieved documents = 5
+
+**Precision@5 = 2/5 = 40%**
+
+---
+
+## 2. Recall@5
+
+Ground Truth mein jitne relevant documents the, unmein se tumne top-5 mein kitne find kar liye?
+
+> "Jo documents actually relevant the, unmein se main kitne retrieve kar paya?"
+
+**Ground Truth:** `[Doc_10, Doc_25]`
+**Retrieved Top-5:** `[Doc_25, Doc_80, Doc_10, Doc_44, Doc_91]`
+
+- Ground truth mein total relevant documents = 2
+- Retrieved relevant documents = Doc_25, Doc_10 = 2
+
+**Recall@5 = 2/2 = 100%**
+
+---
+
+## 3. MRR@5 — Mean Reciprocal Rank
+
+Tumhare retrieved documents mein pehla relevant document generally kitni upar rank par aa raha hai.
+
+Agar MRR = 90% hai, matlab average mein first relevant document bahut high rank par aa raha hai.
+
+**Ground Truth:** `[Doc_10, Doc_25]`
+
+**Query 1**
+
+| Rank | Document | Relevant? |
+|:----:|:--------:|:---------:|
+| 1    | Doc_80   | ❌        |
+| 2    | Doc_90   | ❌        |
+| 3    | Doc_25   | ✅        |
+| 4    | Doc_50   | ❌        |
+| 5    | Doc_70   | ❌        |
+
+First relevant document Rank = 3
+Reciprocal Rank = 1/3 = 0.3333
+
+**Query 2**
+
+| Rank | Document | Relevant? |
+|:----:|:--------:|:---------:|
+| 1    | Doc_25   | ✅        |
+| 2    | Doc_90   | ❌        |
+| 3    | Doc_80   | ❌        |
+| 4    | Doc_50   | ❌        |
+| 5    | Doc_70   | ❌        |
+
+First relevant document Rank = 1
+Reciprocal Rank = 1/1 = 1
+
+**Query 3**
+
+| Rank | Document | Relevant? |
+|:----:|:--------:|:---------:|
+| 1    | Doc_90   | ❌        |
+| 2    | Doc_80   | ❌        |
+| 3    | Doc_50   | ❌        |
+| 4    | Doc_70   | ❌        |
+| 5    | Doc_25   | ✅        |
+
+First relevant document Rank = 5
+Reciprocal Rank = 1/5 = 0.2
+
+**MRR Calculation:**
 ```
+MRR = (0.333 + 1 + 0.2) / 3 = 0.511
+```
+
+**MRR@5 = 51.1%**
+
+---
+
+## 4. nDCG@5 — Normalized Discounted Cumulative Gain
+
+Tumhare retrieved documents ki ranking, ideal ranking ke comparison mein kitne % matching hai.
+
+Agar nDCG = 90% hai, matlab tumhare retrieved documents ki ranking, ideal ranking ke comparison mein approximately 90% normalized matching hai.
